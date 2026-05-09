@@ -68,7 +68,7 @@ export default function SignupPage() {
       return;
     }
     if (form.password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError("Password must be at least 6 characters...");
       return;
     }
     if (form.role === "Lecturer" && !form.subjectName.trim()) {
