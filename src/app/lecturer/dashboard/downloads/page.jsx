@@ -2,16 +2,24 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Download, Eye, X, Search, BookOpen, CheckSquare } from "lucide-react";
+import MathRenderer from "@/components/MathRenderer";
 import {
   getSubjects,
   getChapterBySubject,
   getQuestionsByChapter,
 } from "@/services/lecturerService";
 
+// ─── Helper ───────────────────────────────────────────────────────────────────
+function getCorrectAnswer(q) {
+  if (q.questionType === "INTEGER") return q.correctAnswer ?? "—";
+  const idx = q.options?.findIndex((o) => o.isCorrect);
+  return idx >= 0 ? ["A", "B", "C", "D"][idx] : "—";
+}
+
 // ─── Paper content ────────────────────────────────────────────────────────────
 // All colours are inline hex — html2canvas cannot parse oklch/lab from Tailwind.
 // No header, no difficulty badge (per requirements).
-function PaperContent({ questions }) {
+function PaperContent({ questions, startingQNo = 1 }) {
   return (
     <div style={{ backgroundColor: "#ffffff", padding: "32px", fontFamily: "Georgia, serif" }}>
       {questions.map((q, idx) => (
@@ -20,13 +28,13 @@ function PaperContent({ questions }) {
 
             {/* Number */}
             <span style={{ fontWeight: "bold", color: "#111827", flexShrink: 0, width: "24px" }}>
-              {idx + 1}.
+              {startingQNo + idx}.
             </span>
 
             {/* Body */}
             <div style={{ flex: 1 }}>
               <p style={{ color: "#111827", lineHeight: "1.65", margin: 0 }}>
-                {q.questionText}
+                <MathRenderer text={q.questionText} />
               </p>
 
               {/* Options — show whenever options exist, regardless of questionType stored */}
@@ -37,7 +45,7 @@ function PaperContent({ questions }) {
                       <span style={{ fontWeight: "600", flexShrink: 0 }}>
                         {String.fromCharCode(65 + oIdx)}.
                       </span>
-                      <span>{opt.optionText}</span>
+                      <MathRenderer text={opt.optionText} />
                     </div>
                   ))}
                 </div>
@@ -64,6 +72,63 @@ function PaperContent({ questions }) {
   );
 }
 
+// ─── Answer key content ───────────────────────────────────────────────────────
+function AnswerKeyContent({ questions, startingQNo = 1 }) {
+  return (
+    <div style={{ backgroundColor: "#ffffff", padding: "32px", fontFamily: "Georgia, serif" }}>
+      <h2 style={{ textAlign: "center", fontSize: "18px", fontWeight: "bold", marginBottom: "6px", color: "#111827", letterSpacing: "0.05em" }}>
+        ANSWER KEY
+      </h2>
+      <div style={{ borderTop: "2px solid #111827", marginBottom: "24px" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 64px" }}>
+        {questions.map((q, idx) => (
+          <div key={q.id} style={{ display: "flex", gap: "12px", alignItems: "center", fontSize: "14px", color: "#111827" }}>
+            <span style={{ fontWeight: "600", minWidth: "32px" }}>{startingQNo + idx}.</span>
+            <span style={{ fontWeight: "700", color: "#1a3db5", fontSize: "15px" }}>{getCorrectAnswer(q)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Solution key content ─────────────────────────────────────────────────────
+function SolutionKeyContent({ questions, startingQNo = 1 }) {
+  return (
+    <div style={{ backgroundColor: "#ffffff", padding: "32px", fontFamily: "Georgia, serif" }}>
+      <h2 style={{ textAlign: "center", fontSize: "18px", fontWeight: "bold", marginBottom: "6px", color: "#111827", letterSpacing: "0.05em" }}>
+        SOLUTION KEY
+      </h2>
+      <div style={{ borderTop: "2px solid #111827", marginBottom: "28px" }} />
+      {questions.map((q, idx) => (
+        <div key={q.id} style={{ marginBottom: "28px", paddingBottom: "24px", borderBottom: "1px solid #e5e7eb" }}>
+          <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+            <span style={{ fontWeight: "bold", color: "#111827", flexShrink: 0, width: "24px" }}>{startingQNo + idx}.</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: "#111827", lineHeight: "1.65", margin: "0 0 10px 0" }}>
+                <MathRenderer text={q.questionText} />
+              </p>
+              <p style={{ fontWeight: "700", color: "#1a3db5", fontSize: "13px", margin: "0 0 8px 0" }}>
+                Answer: {getCorrectAnswer(q)}
+              </p>
+              {q.explanation ? (
+                <div style={{ background: "#f0f4ff", borderLeft: "3px solid #1a3db5", padding: "10px 14px", borderRadius: "4px" }}>
+                  <p style={{ fontSize: "12px", fontWeight: "600", color: "#1a3db5", margin: "0 0 4px 0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Solution</p>
+                  <div style={{ fontSize: "13px", color: "#374151", lineHeight: "1.7" }}>
+                    <MathRenderer text={q.explanation} />
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontSize: "12px", color: "#9ca3af", fontStyle: "italic", margin: 0 }}>No solution provided.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function DownloadsPage() {
   const [subjects, setSubjects] = useState([]);
@@ -76,8 +141,10 @@ export default function DownloadsPage() {
   const [typeFilter, setTypeFilter] = useState("All");
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showPreview, setShowPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState("paper"); // "paper" | "answerKey" | "solutionKey"
   const [autoDownload, setAutoDownload] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [startingQNo, setStartingQNo] = useState(1);
 
   const paperRef = useRef(null);
 
@@ -176,8 +243,8 @@ export default function DownloadsPage() {
   const clearAll = () => setSelectedIds(new Set());
 
   // ── Preview / download ─────────────────────────────────────────────────────
-  const openPreview = () => { setAutoDownload(false); setShowPreview(true); };
-  const openAndDownload = () => { setAutoDownload(true); setShowPreview(true); };
+  const openPreview = (mode = "paper") => { setPreviewMode(mode); setAutoDownload(false); setShowPreview(true); };
+  const openAndDownload = (mode = "paper") => { setPreviewMode(mode); setAutoDownload(true); setShowPreview(true); };
 
   const handleDownloadPDF = useCallback(async () => {
     if (!paperRef.current) return;
@@ -199,23 +266,23 @@ export default function DownloadsPage() {
       const pageH = 297;
       const margin = 12;
       const usableW = pageW - margin * 2;
+      const usableH = pageH - margin * 2;
       const imgH = (canvas.height * usableW) / canvas.width;
 
-      let remaining = imgH;
-      let yPos = margin;
+      let renderedH = 0;
 
-      pdf.addImage(imgData, "PNG", margin, yPos, usableW, imgH);
-      remaining -= pageH - margin * 2;
-
-      while (remaining > 0) {
-        pdf.addPage();
-        yPos = margin - (imgH - remaining);
+      while (renderedH < imgH) {
+        if (renderedH > 0) pdf.addPage();
+        const yPos = margin - renderedH;
         pdf.addImage(imgData, "PNG", margin, yPos, usableW, imgH);
-        remaining -= pageH - margin * 2;
+        renderedH += usableH;
       }
 
-      const filename = (subjectName || "question-paper")
-        .replace(/\s+/g, "_") + ".pdf";
+      const base = (subjectName || "prepzone").replace(/\s+/g, "_");
+      const suffix = previewMode === "answerKey" ? "_answer_key"
+        : previewMode === "solutionKey" ? "_solution_key"
+        : "_question_paper";
+      const filename = base + suffix + ".pdf";
       pdf.save(filename);
     } catch (e) {
       console.error("PDF generation failed:", e);
@@ -223,7 +290,7 @@ export default function DownloadsPage() {
     } finally {
       setDownloading(false);
     }
-  }, [paperRef, subjectName]);
+  }, [paperRef, subjectName, previewMode]);
 
   useEffect(() => {
     if (showPreview && autoDownload) {
@@ -451,7 +518,7 @@ export default function DownloadsPage() {
                 {selectedQuestions.map((q, idx) => (
                   <li key={q.id} className="flex items-start gap-2 text-sm">
                     <span className="text-blue-500 font-semibold mt-0.5 flex-shrink-0 w-5">
-                      {idx + 1}.
+                      {startingQNo + idx}.
                     </span>
                     <span className="line-clamp-2 flex-1 text-gray-700 leading-relaxed">
                       {q.questionText}
@@ -467,9 +534,21 @@ export default function DownloadsPage() {
               </ul>
             )}
 
-            <div className="flex flex-col gap-2 pt-3 border-t border-gray-100">
+            {/* Starting Q. No. */}
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100 mb-1">
+              <label className="text-xs font-semibold text-gray-500">Starting Q. No.</label>
+              <input
+                type="number"
+                min={1}
+                value={startingQNo}
+                onChange={(e) => setStartingQNo(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center text-gray-800 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
               <button
-                onClick={openPreview}
+                onClick={() => openPreview("paper")}
                 disabled={selectedIds.size === 0}
                 className="flex items-center justify-center gap-2 w-full px-4 py-2 border border-blue-600 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -477,13 +556,31 @@ export default function DownloadsPage() {
                 Preview Paper
               </button>
               <button
-                onClick={openAndDownload}
+                onClick={() => openAndDownload("paper")}
                 disabled={selectedIds.size === 0}
                 className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Download size={15} />
-                Download PDF
+                Question Paper PDF
               </button>
+              <div className="border-t border-gray-100 pt-2 flex flex-col gap-2">
+                <button
+                  onClick={() => openAndDownload("answerKey")}
+                  disabled={selectedIds.size === 0}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Download size={15} />
+                  Answer Key PDF
+                </button>
+                <button
+                  onClick={() => openAndDownload("solutionKey")}
+                  disabled={selectedIds.size === 0}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Download size={15} />
+                  Solution Key PDF
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -495,7 +592,11 @@ export default function DownloadsPage() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
-                <h2 className="text-lg font-semibold text-gray-800">Preview — Question Paper</h2>
+                <h2 className="text-lg font-semibold text-gray-800">
+                  {previewMode === "answerKey" ? "Preview — Answer Key"
+                    : previewMode === "solutionKey" ? "Preview — Solution Key"
+                    : "Preview — Question Paper"}
+                </h2>
                 <p className="text-xs text-gray-400 mt-0.5">This is exactly how the PDF will look.</p>
               </div>
               <button
@@ -508,7 +609,9 @@ export default function DownloadsPage() {
 
             <div className="overflow-y-auto max-h-[65vh] border-b border-gray-100">
               <div ref={paperRef}>
-                <PaperContent questions={selectedQuestions} />
+                {previewMode === "answerKey" && <AnswerKeyContent questions={selectedQuestions} startingQNo={startingQNo} />}
+                {previewMode === "solutionKey" && <SolutionKeyContent questions={selectedQuestions} startingQNo={startingQNo} />}
+                {previewMode === "paper" && <PaperContent questions={selectedQuestions} startingQNo={startingQNo} />}
               </div>
             </div>
 
