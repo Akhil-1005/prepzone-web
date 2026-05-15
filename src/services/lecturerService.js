@@ -1,5 +1,6 @@
 import Cookies from "js-cookie";
 import api from "./apiClient";
+import axios from "axios";
 
 const userId = () => Cookies.get("userId");
 
@@ -7,7 +8,7 @@ export const getDashboardStats = () =>
   api.get("/dashboard/stats", { headers: { userId: userId() } });
 
 export const extractTextFromImage = (imageBase64, mimeType) =>
-  api.post("/question/extract-text", { imageBase64, mimeType });
+  axios.post("/api/extract-text", { imageBase64, mimeType });
 
 export const saveSubject = (subject) =>
   api.post("/subject/create", subject, { headers: { userId: userId() } });
